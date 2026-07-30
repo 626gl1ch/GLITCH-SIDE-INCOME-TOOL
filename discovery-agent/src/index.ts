@@ -65,6 +65,50 @@ export default {
   }
 };
 
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash'
+];
+
+async function fetchFromGeminiWithFallback(env: Env, requestBody: any): Promise<any> {
+  let lastError = null;
+  
+  for (const model of GEMINI_MODELS) {
+    try {
+      const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
+      });
+      
+      if (geminiRes.ok) {
+        return await geminiRes.json();
+      }
+      
+      const errorText = await geminiRes.text();
+      // If rate limited or service unavailable, try the next model
+      if (geminiRes.status === 429 || geminiRes.status === 503) {
+        console.warn(`Model ${model} unavailable (status ${geminiRes.status}). Falling back to next...`);
+        lastError = new Error(`Model ${model} failed: ${errorText}`);
+        continue;
+      }
+      
+      // If it's a 4xx error (like bad request), failing over might not help, but we throw
+      throw new Error(`Gemini API error on ${model}: ${errorText}`);
+      
+    } catch (err: any) {
+      console.warn(`Error connecting to model ${model}: ${err.message}`);
+      lastError = err;
+    }
+  }
+  
+  throw new Error(`All Gemini models failed. Last error: ${lastError?.message}`);
+}
+
 async function runSetupAssistant(env: Env, opportunityId: string) {
   // 1. Get Opportunity
   const oppRes = await fetch(`${env.SUPABASE_URL}/rest/v1/opportunities?id=eq.${opportunityId}&select=*`, {
@@ -95,15 +139,11 @@ Produce:
 
 Do not attempt to access or submit the signup form. Output only the summary and draft text for human review.`;
 
-  const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }]
-    })
+  const geminiData = await fetchFromGeminiWithFallback(env, {
+    contents: [{ role: "user", parts: [{ text: prompt }] }]
   });
 
-  const geminiData = await geminiRes.json() as any;
+
   const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "No insights found.";
   
   // 4. Attach draft to a new account row
@@ -142,28 +182,20 @@ async function runDiscovery(env: Env) {
   // 2. Call Gemini API
   const userPrompt = `Find new or currently active opportunities in these categories: ${profile.categories.join(', ')}. Prioritize platforms with payout methods in ${profile.preferred_payout_methods.join(', ')} and a payout threshold at or below $${profile.min_acceptable_payout_usd * 5}.`;
   
-  const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
+  const geminiData = await fetchFromGeminiWithFallback(env, {
+    systemInstruction: {
+      parts: [{ text: DISCOVERY_SYSTEM_PROMPT }]
     },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: DISCOVERY_SYSTEM_PROMPT }]
-      },
-      contents: [{
-        role: "user",
-        parts: [{ text: userPrompt }]
-      }],
-      tools: [{
-        googleSearchRetrieval: {
-          dynamicRetrievalConfig: { mode: "MODE_DYNAMIC", dynamicThreshold: 0.3 }
-        }
-      }]
-    })
+    contents: [{
+      role: "user",
+      parts: [{ text: userPrompt }]
+    }],
+    tools: [{
+      googleSearchRetrieval: {
+        dynamicRetrievalConfig: { mode: "MODE_DYNAMIC", dynamicThreshold: 0.3 }
+      }
+    }]
   });
-
-  const geminiData = await geminiRes.json() as any;
   const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
   const jsonStr = text.replace(/```json|```/g, "").trim();
   

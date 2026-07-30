@@ -9,7 +9,13 @@ function App() {
   // Dashboard state
   const [opportunities, setOpportunities] = useState<any[]>([]);
   const [earnings, setEarnings] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // Form state
+  const [logAccountId, setLogAccountId] = useState('');
+  const [logAmount, setLogAmount] = useState('');
+  const [isLogging, setIsLogging] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -20,8 +26,14 @@ function App() {
   const fetchDashboardData = async () => {
     const { data: opps } = await supabase.from('opportunities').select('*').order('last_seen_at', { ascending: false });
     const { data: earns } = await supabase.from('earnings').select(`*, accounts(opportunity_id, status)`).order('earned_at', { ascending: false });
+    const { data: accs } = await supabase.from('accounts').select(`*, opportunities(*)`).eq('status', 'active');
+    
     if (opps) setOpportunities(opps);
     if (earns) setEarnings(earns);
+    if (accs) {
+      setAccounts(accs);
+      if (accs.length > 0) setLogAccountId(accs[0].id);
+    }
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -56,6 +68,30 @@ function App() {
       </div>
     );
   }
+
+  const handleQuickLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!logAccountId || !logAmount) return;
+    
+    setIsLogging(true);
+    const { error } = await supabase.from('earnings').insert({
+      account_id: logAccountId,
+      amount: parseFloat(logAmount),
+      currency: 'USD',
+      status: 'paid',
+      source: 'manual',
+      earned_at: new Date().toISOString()
+    });
+    
+    setIsLogging(false);
+    if (error) {
+      alert("Error logging earnings: " + error.message);
+    } else {
+      setLogAmount('');
+      alert("Earnings logged successfully!");
+      fetchDashboardData();
+    }
+  };
 
   const totalEarned = earnings.reduce((acc, curr) => acc + Number(curr.amount), 0);
 
@@ -109,7 +145,7 @@ function App() {
               <div className="glass-panel p-6">
                 <div className="text-gray-400 text-sm font-medium mb-2">Active Accounts</div>
                 <div className="text-4xl font-bold text-indigo-400">
-                  4
+                  {accounts.length}
                 </div>
               </div>
             </div>
@@ -117,25 +153,25 @@ function App() {
             <div className="glass-panel p-6 mt-8">
               <h3 className="text-xl font-bold mb-4">Threshold Tracker</h3>
               <div className="space-y-4">
-                {/* Dummy visual for threshold */}
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium text-gray-200">ySense</span>
-                    <span className="text-gray-400">$6.50 / $10.00</span>
-                  </div>
-                  <div className="w-full bg-gray-800 rounded-full h-2.5">
-                    <div className="bg-indigo-500 h-2.5 rounded-full" style={{ width: '65%' }}></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium text-gray-200">Timebucks</span>
-                    <span className="text-gray-400">$1.20 / $5.00</span>
-                  </div>
-                  <div className="w-full bg-gray-800 rounded-full h-2.5">
-                    <div className="bg-indigo-500 h-2.5 rounded-full" style={{ width: '24%' }}></div>
-                  </div>
-                </div>
+                {accounts.length === 0 && <p className="text-gray-500 text-sm">No active accounts to track.</p>}
+                {accounts.map(acc => {
+                  const opp = acc.opportunities;
+                  const threshold = opp.payout_threshold_usd || 0;
+                  const accEarnings = earnings.filter(e => e.account_id === acc.id).reduce((a,c) => a + Number(c.amount), 0);
+                  const progress = threshold > 0 ? Math.min((accEarnings / threshold) * 100, 100) : 100;
+                  
+                  return (
+                    <div key={acc.id}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="font-medium text-gray-200">{opp.name}</span>
+                        <span className="text-gray-400">${accEarnings.toFixed(2)} {threshold > 0 ? `/ $${threshold.toFixed(2)}` : ''}</span>
+                      </div>
+                      <div className="w-full bg-gray-800 rounded-full h-2.5">
+                        <div className="bg-indigo-500 h-2.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -167,19 +203,23 @@ function App() {
         {activeTab === 'quicklog' && (
           <div className="animate-slide-up max-w-lg">
             <h2 className="text-3xl font-bold mb-6">Quick Log</h2>
-            <form className="glass-panel p-6 space-y-4" onSubmit={(e) => { e.preventDefault(); alert("Logged!"); }}>
+            <form className="glass-panel p-6 space-y-4" onSubmit={handleQuickLog}>
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">Platform Account</label>
-                <select className="input-field">
-                  <option>ySense (Active)</option>
-                  <option>Timebucks (Active)</option>
+                <select className="input-field" value={logAccountId} onChange={(e) => setLogAccountId(e.target.value)} required>
+                  {accounts.length === 0 && <option value="">No active accounts</option>}
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.opportunities?.name} (Active)</option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">Amount ($)</label>
-                <input type="number" step="0.01" className="input-field" placeholder="0.50" />
+                <input type="number" step="0.01" min="0.01" required className="input-field" placeholder="0.50" value={logAmount} onChange={(e) => setLogAmount(e.target.value)} />
               </div>
-              <button type="submit" className="btn-primary w-full mt-4">Log Earnings</button>
+              <button type="submit" className="btn-primary w-full mt-4" disabled={isLogging || accounts.length === 0}>
+                {isLogging ? 'Logging...' : 'Log Earnings'}
+              </button>
             </form>
           </div>
         )}

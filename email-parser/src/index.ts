@@ -5,58 +5,64 @@ export interface Env {
 
 export default {
   async email(message: any, env: Env, ctx: ExecutionContext) {
-    // Basic Cloudflare Email Worker handler
-    const rawEmail = await new Response(message.raw).text();
-    
-    // Parse sender
-    const from = message.from || "";
-    
-    // Quick regex to extract amounts like $5.00 or 5.00 USD
-    const amountMatch = rawEmail.match(/\$\s*(\d+\.\d{2})|(\d+\.\d{2})\s*USD/i);
-    let amount = 0;
-    if (amountMatch) {
-      amount = parseFloat(amountMatch[1] || amountMatch[2]);
-    }
+    try {
+      const rawEmail = await new Response(message.raw).text();
+      const from = message.from || "";
+      
+      const amountMatch = rawEmail.match(/\$\s*(\d+\.\d{2})|(\d+\.\d{2})\s*USD/i);
+      let amount = 0;
+      if (amountMatch) {
+        amount = parseFloat(amountMatch[1] || amountMatch[2]);
+      }
 
-    if (amount > 0) {
-      // 1. Identify platform from sender domain (e.g., @ysense.com)
-      const domainMatch = from.match(/@([a-zA-Z0-9.-]+)/);
-      const domain = domainMatch ? domainMatch[1] : '';
+      if (amount > 0) {
+        const domainMatch = from.match(/@([a-zA-Z0-9.-]+)/);
+        const domain = domainMatch ? domainMatch[1] : '';
 
-      // 2. Fetch active accounts
-      const accountsRes = await fetch(`${env.SUPABASE_URL}/rest/v1/accounts?status=eq.active&select=id,opportunities(name)`, {
-        headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}` }
-      });
-      const accounts = await accountsRes.json() as any[];
+        const accountsRes = await fetch(`${env.SUPABASE_URL}/rest/v1/accounts?status=eq.active&select=id,opportunities(name)`, {
+          headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}` }
+        });
+        
+        if (!accountsRes.ok) {
+          throw new Error(`Supabase API error: ${await accountsRes.text()}`);
+        }
+        
+        const accounts = await accountsRes.json() as any[];
+        let accountId = null;
+        for (const acc of accounts) {
+          if (acc.opportunities?.name?.toLowerCase().replace(/\s/g, '') === domain.split('.')[0].toLowerCase()) {
+            accountId = acc.id;
+            break;
+          }
+        }
 
-      // Try to match the domain to a known opportunity name
-      let accountId = null;
-      for (const acc of accounts) {
-        if (acc.opportunities?.name?.toLowerCase().replace(/\s/g, '') === domain.split('.')[0].toLowerCase()) {
-          accountId = acc.id;
-          break;
+        if (accountId) {
+          const insertRes = await fetch(`${env.SUPABASE_URL}/rest/v1/earnings`, {
+            method: 'POST',
+            headers: {
+              apikey: env.SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              account_id: accountId,
+              amount,
+              currency: 'USD',
+              status: 'paid',
+              source: 'email_parsed',
+              earned_at: new Date().toISOString()
+            })
+          });
+          
+          if (!insertRes.ok) {
+            throw new Error(`Failed to insert earnings: ${await insertRes.text()}`);
+          }
         }
       }
-
-      if (accountId) {
-        // 3. Log earnings
-        await fetch(`${env.SUPABASE_URL}/rest/v1/earnings`, {
-          method: 'POST',
-          headers: {
-            apikey: env.SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            account_id: accountId,
-            amount,
-            currency: 'USD',
-            status: 'paid',
-            source: 'email_parsed',
-            earned_at: new Date().toISOString()
-          })
-        });
-      }
+    } catch (err: any) {
+      console.error("Email processing failed:", err.message);
+      // Let the email fail gracefully so it can be retried or logged
+      message.setReject(`Parser error: ${err.message}`);
     }
   }
 };
