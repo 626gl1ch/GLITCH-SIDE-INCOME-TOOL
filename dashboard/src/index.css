@@ -3,21 +3,42 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
   body {
-    @apply bg-gray-950 text-gray-100;
+    @apply bg-gray-950 text-gray-100 antialiased selection:bg-indigo-500/30;
+  }
+  
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-800 rounded-full hover:bg-gray-700 transition-colors;
   }
 }
 
 @layer components {
   .glass-panel {
-    @apply bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-2xl shadow-xl;
+    @apply bg-gray-900/40 backdrop-blur-2xl border border-gray-800/60 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] relative overflow-hidden;
   }
   
+  .glass-panel::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none;
+  }
+
   .btn-primary {
-    @apply px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-medium rounded-xl transition-all shadow-lg shadow-indigo-500/25 active:scale-95;
+    @apply relative overflow-hidden px-6 py-3 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 bg-[length:200%_auto] hover:bg-[position:right_center] text-white font-medium rounded-2xl transition-all shadow-lg shadow-indigo-500/25 active:scale-95 duration-300;
   }
   
   .input-field {
-    @apply w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-gray-600;
+    @apply w-full bg-gray-900/50 backdrop-blur-md border border-gray-800/80 rounded-2xl px-5 py-3 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all duration-300 placeholder:text-gray-600 text-gray-200 hover:border-gray-700;
   }
 }
