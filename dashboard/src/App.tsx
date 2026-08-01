@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import { LayoutDashboard, Wallet, LogOut, Search, PlusCircle, Activity, ChevronRight, CheckCircle2, Settings as SettingsIcon, Star, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Wallet, LogOut, Search, PlusCircle, Activity, ChevronRight, CheckCircle2, Settings as SettingsIcon, Star, Trash2, Flag, Clock, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Background Component for Premium Feel ---
@@ -23,6 +23,7 @@ function App() {
   const [profileCountry, setProfileCountry] = useState('Nigeria');
   const [activeTab, setActiveTab] = useState('overview');
   const [isSearching, setIsSearching] = useState(false);
+  const [setupLoading, setSetupLoading] = useState<string | null>(null);
   
   // Form state
   const [logAccountId, setLogAccountId] = useState('');
@@ -53,12 +54,37 @@ function App() {
     }
   };
 
+  const handleFlagOpportunity = async (opportunityId: string) => {
+    setOpportunities(opportunities.filter(o => o.id !== opportunityId));
+    await supabase.from('corrections').insert([{
+      opportunity_id: opportunityId,
+      reason: 'User flagged as incorrect or saturated'
+    }]);
+  };
+
+  const handleReviewAndSetup = async (opportunityId: string) => {
+    setSetupLoading(opportunityId);
+    try {
+      const opp = opportunities.find(o => o.id === opportunityId);
+      window.open(opp.signup_url, '_blank');
+      await fetch('https://discovery-agent.daniellancce1.workers.dev/setup-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ opportunityId })
+      });
+      fetchDashboardData();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSetupLoading(null);
+    }
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (password === 'sidehustle2026') { 
       setIsAuthenticated(true);
     } else {
-      // Small shake animation could go here for incorrect pwd
       alert('Incorrect password');
     }
   };
@@ -90,7 +116,6 @@ function App() {
 
   const totalEarned = earnings.reduce((acc, curr) => acc + Number(curr.amount), 0);
 
-  // --- Login Screen ---
   if (!isAuthenticated) {
     return (
       <div className="relative min-h-screen flex items-center justify-center p-4">
@@ -148,7 +173,6 @@ function App() {
     );
   }
 
-  // --- Main Dashboard UI ---
   const navItems = [
     { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
     { id: 'opportunities', icon: Search, label: 'Discoveries' },
@@ -157,45 +181,15 @@ function App() {
     { id: 'settings', icon: SettingsIcon, label: 'Settings' }
   ];
 
-  const allCountries = [
-    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
-    "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo, Democratic Republic of the", "Congo, Republic of the", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic",
-    "Denmark", "Djibouti", "Dominica", "Dominican Republic",
-    "East Timor", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia",
-    "Fiji", "Finland", "France",
-    "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana",
-    "Haiti", "Honduras", "Hungary",
-    "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Ivory Coast",
-    "Jamaica", "Japan", "Jordan",
-    "Kazakhstan", "Kenya", "Kiribati", "Korea, North", "Korea, South", "Kosovo", "Kuwait", "Kyrgyzstan",
-    "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
-    "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar",
-    "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Macedonia", "Norway",
-    "Oman",
-    "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal",
-    "Qatar",
-    "Romania", "Russia", "Rwanda",
-    "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria",
-    "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu",
-    "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan",
-    "Vanuatu", "Vatican City", "Venezuela", "Vietnam",
-    "Yemen",
-    "Zambia", "Zimbabwe"
-  ];
+  const allCountries = ["Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo, Democratic Republic of the", "Congo, Republic of the", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "East Timor", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Ivory Coast", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Korea, North", "Korea, South", "Kosovo", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"];
 
   const displayOpportunities = opportunities.filter(opp => !accounts.some(acc => acc.opportunity_id === opp.id));
 
   return (
     <div className="relative min-h-screen flex flex-col md:flex-row font-outfit text-gray-100 bg-gray-950">
       <BackgroundOrbs />
-      
-      {/* Sidebar */}
       <aside className="relative z-20 w-full md:w-72 border-r border-gray-800/50 bg-gray-900/40 backdrop-blur-3xl p-6 flex flex-col shadow-2xl">
-        <motion.div 
-          initial={{ x: -20, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          className="flex items-center gap-4 mb-12"
-        >
+        <div className="flex items-center gap-4 mb-12">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
             <Wallet className="w-6 h-6 text-white" />
           </div>
@@ -203,70 +197,41 @@ function App() {
             <h1 className="font-bold text-xl leading-none">Tracker</h1>
             <span className="text-xs text-indigo-400 font-medium uppercase tracking-wider">Side Income</span>
           </div>
-        </motion.div>
-        
+        </div>
         <nav className="space-y-2 flex-1 relative">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
-              <button 
-                key={item.id}
-                onClick={() => setActiveTab(item.id)} 
-                className={`relative w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 overflow-hidden group ${isActive ? 'text-white' : 'text-gray-400 hover:text-white'}`}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="active-pill"
-                    className="absolute inset-0 bg-white/5 border border-white/10 rounded-2xl"
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                  />
-                )}
+              <button key={item.id} onClick={() => setActiveTab(item.id)} className={`relative w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 overflow-hidden group ${isActive ? 'text-white' : 'text-gray-400 hover:text-white'}`}>
+                {isActive && <motion.div layoutId="active-pill" className="absolute inset-0 bg-white/5 border border-white/10 rounded-2xl" transition={{ type: "spring", stiffness: 300, damping: 30 }} />}
                 <Icon className={`w-5 h-5 relative z-10 transition-transform duration-300 ${isActive ? 'text-indigo-400' : 'group-hover:scale-110'}`} />
                 <span className="font-medium relative z-10">{item.label}</span>
               </button>
             );
           })}
         </nav>
-        
         <button onClick={() => setIsAuthenticated(false)} className="mt-auto flex items-center gap-4 px-5 py-4 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-2xl transition-all group">
           <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> 
           <span className="font-medium">Lock Dashboard</span>
         </button>
       </aside>
 
-      {/* Main Content Area */}
       <main className="relative z-10 flex-1 p-6 md:p-12 overflow-y-auto overflow-x-hidden">
         <AnimatePresence mode="wait">
-          
-          {/* OVERVIEW TAB */}
           {activeTab === 'overview' && (
-            <motion.div 
-              key="overview"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
-              className="space-y-10 max-w-5xl mx-auto"
-            >
+            <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.4 }} className="space-y-10 max-w-5xl mx-auto">
               <header>
                 <h2 className="text-4xl font-bold tracking-tight mb-2">Overview</h2>
                 <p className="text-gray-400 text-lg">Here's the pulse of your income streams.</p>
               </header>
-              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
                   { label: 'Total Earned', value: `$${totalEarned.toFixed(2)}`, color: 'from-green-400 to-emerald-500', icon: Activity },
                   { label: 'Pending Payouts', value: `$${earnings.filter(e => e.status === 'pending').reduce((a,c) => a + Number(c.amount), 0).toFixed(2)}`, color: 'from-white to-gray-300', icon: Wallet },
                   { label: 'Active Accounts', value: accounts.length.toString(), color: 'from-indigo-400 to-purple-400', icon: LayoutDashboard }
                 ].map((stat, i) => (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.1 }}
-                    className="glass-panel p-6 group hover:border-gray-700/80 transition-colors"
-                    key={stat.label}
-                  >
+                  <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="glass-panel p-6">
                     <div className="flex items-center gap-3 text-gray-400 text-sm font-medium mb-4">
                       <stat.icon className="w-4 h-4" /> {stat.label}
                     </div>
@@ -276,192 +241,63 @@ function App() {
                   </motion.div>
                 ))}
               </div>
-
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="glass-panel p-8"
-              >
-                <h3 className="text-2xl font-bold mb-6">Threshold Tracker</h3>
-                <div className="space-y-6">
-                  {accounts.filter(a => a.status === 'active').length === 0 && <p className="text-gray-500">No active accounts to track.</p>}
-                  {accounts.filter(a => a.status === 'active').map(acc => {
-                    const opp = acc.opportunities;
-                    const threshold = opp.payout_threshold_usd || 0;
-                    const accEarnings = earnings.filter(e => e.account_id === acc.id).reduce((a,c) => a + Number(c.amount), 0);
-                    const progress = threshold > 0 ? Math.min((accEarnings / threshold) * 100, 100) : 100;
-                    
-                    return (
-                      <div key={acc.id} className="group">
-                        <div className="flex justify-between text-sm mb-2">
-                          <span className="font-semibold text-gray-200">{opp.name}</span>
-                          <span className="text-gray-400 font-medium">
-                            <span className="text-white">${accEarnings.toFixed(2)}</span> {threshold > 0 ? `/ $${threshold.toFixed(2)}` : ''}
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-900 rounded-full h-3 overflow-hidden border border-gray-800">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            transition={{ duration: 1, ease: "easeOut" }}
-                            className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full relative"
-                          >
-                            <div className="absolute inset-0 bg-white/20 w-full animate-[shimmer_2s_infinite]"></div>
-                          </motion.div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </motion.div>
             </motion.div>
           )}
 
-          {/* OPPORTUNITIES TAB */}
           {activeTab === 'opportunities' && (
-            <motion.div 
-              key="opportunities"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
-              className="space-y-8 max-w-5xl mx-auto"
-            >
+            <motion.div key="opportunities" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.4 }} className="space-y-8 max-w-5xl mx-auto">
               <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-2">
                 <div>
                   <h2 className="text-4xl font-bold tracking-tight mb-2">New Discoveries</h2>
-                  <p className="text-gray-400 text-lg">Opportunities automatically found by the AI agent.</p>
                 </div>
-                <button 
-                  onClick={async () => {
+                <button onClick={async () => {
                     setIsSearching(true);
                     try {
                       await fetch('https://discovery-agent.daniellancce1.workers.dev/trigger-discovery');
                       await fetchDashboardData();
-                    } catch (e) {
-                      console.error(e);
-                    }
+                    } catch (e) { console.error(e); }
                     setIsSearching(false);
-                  }}
-                  disabled={isSearching}
-                  className="btn-primary py-3 px-6 whitespace-nowrap flex items-center gap-2"
-                >
-                  {isSearching ? (
-                    <><motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, ease: "linear", duration: 1 }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> Searching...</>
-                  ) : (
-                    <><Search className="w-4 h-4" /> Find More Tasks</>
-                  )}
+                  }} disabled={isSearching} className="btn-primary py-3 px-6 flex items-center gap-2">
+                  {isSearching ? 'Searching...' : <><Search className="w-4 h-4" /> Find More</>}
                 </button>
               </header>
-              
               <div className="grid gap-5">
-                {displayOpportunities.map((opp, i) => (
-                  <motion.div 
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    key={opp.id} 
-                    className="glass-panel p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 group hover:border-gray-700/80 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1"
-                  >
-                    <div>
-                      <h3 className="text-2xl font-bold text-white flex items-center gap-3 mb-2">
-                        {opp.name} 
-                        <span className="text-[10px] px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full uppercase tracking-widest font-semibold">
-                          {opp.category}
-                        </span>
-                      </h3>
-                      <p className="text-sm text-gray-400">
-                        <span className="text-gray-300">Payouts:</span> {opp.payout_methods.join(', ')} 
-                        <span className="mx-2">•</span> 
-                        <span className="text-gray-300">Threshold:</span> ${opp.payout_threshold_usd}
-                      </p>
-                    </div>
-                    <button className="btn-primary flex items-center gap-2" onClick={async () => {
-                      window.open(opp.signup_url, '_blank');
-                      // Kick off AI setup assistant in background
-                      try {
-                        await fetch('https://discovery-agent.daniellancce1.workers.dev/setup-assistant', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ opportunityId: opp.id })
-                        });
-                        fetchDashboardData();
-                      } catch (e) {
-                        console.error(e);
-                      }
-                    }}>
-                      Review & Setup <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </motion.div>
-                ))}
-                {displayOpportunities.length === 0 && (
-                  <div className="py-12 text-center text-gray-500 border border-dashed border-gray-800 rounded-3xl">
-                    <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                    <p>No new opportunities found yet. Click "Find More Tasks" to ask the AI to search.</p>
-                  </div>
-                )}
+                {displayOpportunities.map((opp, i) => {
+                  const daysVerifiedAgo = opp.last_verified_at 
+                    ? Math.floor((new Date().getTime() - new Date(opp.last_verified_at).getTime()) / (1000 * 3600 * 24))
+                    : null;
+                  return (
+                    <motion.div key={opp.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="glass-panel p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start gap-6">
+                      <div className="flex-1">
+                        <h3 className="text-2xl font-bold mb-2">{opp.name}</h3>
+                        <p className="text-gray-400 text-sm mb-4">
+                          Threshold: ${opp.payout_threshold_usd}
+                          {opp.source_url && (
+                             <span className="ml-4 px-2 py-1 bg-white/5 rounded text-xs text-blue-400">Source: {new URL(opp.source_url).hostname}</span>
+                          )}
+                          {daysVerifiedAgo !== null && (
+                             <span className={`ml-2 px-2 py-1 rounded text-xs ${daysVerifiedAgo > 30 ? 'bg-red-500/10 text-red-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                               Verified {daysVerifiedAgo} days ago
+                             </span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <button onClick={() => handleReviewAndSetup(opp.id)} className="btn-primary py-2 px-4 text-sm flex items-center gap-2">
+                          Review & Setup <ChevronRight className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleFlagOpportunity(opp.id)} className="text-xs text-gray-500 hover:text-red-400 flex items-center justify-center gap-1">
+                          <Flag className="w-3 h-3" /> Flag as Incorrect
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </motion.div>
           )}
 
-          {/* ACCOUNTS TAB */}
           {activeTab === 'accounts' && (
-            <motion.div 
-              key="accounts"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
-              className="space-y-8 max-w-5xl mx-auto"
-            >
-              <header>
-                <h2 className="text-4xl font-bold tracking-tight mb-2">My Accounts</h2>
-                <p className="text-gray-400 text-lg">Manage your signed-up platforms and AI setup notes.</p>
-              </header>
-              
-              <div className="grid gap-5">
-                {accounts.map((acc, i) => (
-                  <motion.div 
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    key={acc.id} 
-                    className="glass-panel p-6 sm:p-8 flex flex-col group transition-all duration-300"
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-2xl font-bold text-white flex items-center gap-3">
-                          {acc.opportunities?.name}
-                          <span className={`text-[10px] px-3 py-1 border rounded-full uppercase tracking-widest font-semibold ${acc.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'}`}>
-                            {acc.status.replace('_', ' ')}
-                          </span>
-                        </h3>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={async () => {
-                            await supabase.from('accounts').update({ up_next: !acc.up_next }).eq('id', acc.id);
-                            fetchDashboardData();
-                          }}
-                          className={`p-2 rounded-xl transition-colors ${acc.up_next ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-800/50 text-gray-500 hover:text-white'}`}
-                          title="Mark as Up Next"
-                        >
-                          <Star className="w-5 h-5" fill={acc.up_next ? "currentColor" : "none"} />
-                        </button>
-                        
-                        {acc.status === 'pending_setup' && (
-                          <button 
-                            className="btn-primary py-2 px-4 text-sm"
-                            onClick={async () => {
-                              await supabase.from('accounts').update({ status: 'active' }).eq('id', acc.id);
-                              fetchDashboardData();
-                            }}
-                          >
-                            Mark Complete
-                          </button>
-                        )}
-                        
                         <button 
                           onClick={async () => {
                             if (confirm('Are you sure you want to remove this task?')) {

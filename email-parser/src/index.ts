@@ -37,6 +37,9 @@ export default {
         }
 
         if (accountId) {
+          const isOutlier = amount < 0.01 || amount > 500.00;
+          const payoutStatus = isOutlier ? 'needs_review' : 'paid';
+
           const insertRes = await fetch(`${env.SUPABASE_URL}/rest/v1/earnings`, {
             method: 'POST',
             headers: {
@@ -48,7 +51,7 @@ export default {
               account_id: accountId,
               amount,
               currency: 'USD',
-              status: 'paid',
+              status: payoutStatus,
               source: 'email_parsed',
               earned_at: new Date().toISOString()
             })
@@ -58,6 +61,8 @@ export default {
             throw new Error(`Failed to insert earnings: ${await insertRes.text()}`);
           }
         }
+      } else {
+        console.log("Parsed amount was 0, ignoring.");
       }
     } catch (err: any) {
       console.error("Email processing failed:", err.message);

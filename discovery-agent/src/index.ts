@@ -22,6 +22,10 @@ Specifically, completely IGNORE the following and anything similar to them (they
 - Rev, TranscribeMe, GoTranscript
 - Prolific (waitlists are too long)
 
+FEW-SHOT EXAMPLE:
+If a search surfaces "Toloka" as well-reviewed for {COUNTRY}.
+Correct response: Skip it completely. It is on the ignore list, regardless of how legitimate it appears in search results.
+
 For each platform you DO recommend, verify:
 1. It is a lesser-known but highly legitimate platform with a real track record of paying out.
 2. It actively supports and has decent task allocation for users in {COUNTRY}.
@@ -35,12 +39,24 @@ Format your response exactly as a JSON array of objects. YOU MUST use REAL data,
     "payout_methods": ["<Real Payout Method 1>", "<Real Payout Method 2>"],
     "payout_threshold_usd": <Real Number>,
     "signup_url": "<Real, Valid HTTPS URL to the platform>",
+    "source_url": "<The exact URL you used to verify the threshold>",
     "red_flags": ["<Real warning or downside 1>", "<Real warning or downside 2>"]
   }
 ]
 
 Omit anything you are not reasonably confident is currently active, eligible for {COUNTRY}, and unsaturated. An empty array is a valid, correct response if nothing new qualifies.
 `;
+
+const BLACKLIST = [
+  "amazon associates", "fiverr", "upwork", "freelancer",
+  "remotasks", "outlier", "scale ai", "dataannotation", "usertesting",
+  "tester work", "trymata", "trymyui", "userlytics", "swagbucks",
+  "inboxdollars", "ysense", "freecash", "prizerebel", "mypoints",
+  "appen", "clickworker", "toloka", "telus", "oneforma", "microworkers",
+  "rev", "transcribeme", "gotranscript", "prolific"
+];
+
+const isBlacklisted = (name: string) => BLACKLIST.some(b => name.toLowerCase().includes(b));
 
 export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
@@ -176,6 +192,7 @@ Produce:
 1. A 3-bullet summary of REAL, verified eligibility/KYC requirements for a user based in their country.
 2. Draft profile text (display name, short bio) based on this stored profile: ${JSON.stringify(profile)} — for the human to copy in, not to submit.
 3. Any known submission quirks (e.g. "requires phone verification", "flags VPN usage", "asks for a referral code").
+4. source_url: The exact URL where you verified the minimum payout threshold.
 
 CRITICAL ANTI-HALLUCINATION RULES:
 - Do NOT guess, estimate, or hallucinate the minimum withdrawal threshold. If you don't know the exact current threshold, say "Threshold unknown".
@@ -189,8 +206,32 @@ Do not attempt to access or submit the signup form. Output only the summary and 
     contents: [{ role: "user", parts: [{ text: prompt }] }]
   });
 
+  const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "No insights found.";
+  
+  // Enforce Citations structurally
+  const groundingChunks = geminiData.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+  const groundingUrls = groundingChunks.map((chunk: any) => chunk.web?.uri || chunk.retrievedContext?.uri).filter(Boolean);
+  
+  let setupNotes = rawText;
+  
+  // Extract source_url if provided by model
+  const sourceUrlMatch = rawText.match(/source_url:\s*(https?:\/\/[^\s]+)/i);
+  let verifiedSource = null;
+  if (sourceUrlMatch) {
+    const candidateUrl = sourceUrlMatch[1];
+    // Check if the URL exists in the actual grounding metadata provided by Google Search
+    const isGrounded = groundingUrls.some((url: string) => url.includes(candidateUrl) || candidateUrl.includes(url));
+    if (isGrounded) {
+      verifiedSource = candidateUrl;
+    } else {
+      setupNotes += "\n\nWARNING: The AI provided a source URL that could not be structurally verified against search grounding metadata. Proceed with caution.";
+    }
+  }
 
-  const setupNotes = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "No insights found.";
+  // Fallback if no source is grounded
+  if (!verifiedSource && rawText.includes("Threshold:")) {
+     setupNotes += "\n\nNote: Minimum threshold could not be definitively verified. Treat as 'Threshold unknown' until checked on the official site.";
+  }
   
   // 4. Attach draft to a new account row
   const { error: insertError } = await fetch(`${env.SUPABASE_URL}/rest/v1/accounts`, {
@@ -251,18 +292,34 @@ Find 2-3 NEW, unsaturated "hidden gem" platforms that are highly rated, have goo
     return;
   }
 
+  // Filter against blacklist structurally
+  const cleanOpportunities = opportunities.filter(opp => {
+    if (isBlacklisted(opp.name)) {
+      console.warn(`Dropped blacklisted opportunity: \${opp.name}`);
+      return false;
+    }
+    return true;
+  });
+
+  if (cleanOpportunities.length === 0) {
+    console.log("All discovered opportunities were blacklisted.");
+    return;
+  }
+
   // 3. Upsert into Supabase
   const newItems = [];
-  for (const opp of opportunities) {
+  for (const opp of cleanOpportunities) {
     const upsertBody = {
       name: opp.name,
       category: opp.category,
       payout_methods: opp.payout_methods,
       payout_threshold_usd: opp.payout_threshold_usd,
       signup_url: opp.signup_url,
+      source_url: opp.source_url || null,
       red_flags: opp.red_flags,
       status: 'new',
-      last_seen_at: new Date().toISOString()
+      last_seen_at: new Date().toISOString(),
+      last_verified_at: new Date().toISOString()
     };
     
     // We use ON CONFLICT to just update last_seen_at if it already exists
