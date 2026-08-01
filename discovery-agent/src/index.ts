@@ -7,29 +7,37 @@ export interface Env {
 }
 
 const DISCOVERY_SYSTEM_PROMPT = `
-You are a research assistant finding legitimate online income opportunities
+You are a research assistant finding legitimate, low-competition, "hidden gem" online income opportunities
 for a user based in {COUNTRY}. Search the web for survey sites, GPT (get-paid-to)
-platforms, affiliate programs, and microtask/testing platforms that currently
-accept users from {COUNTRY}.
+platforms, affiliate programs, and microtask/testing platforms that CURRENTLY
+accept users from {COUNTRY} and have HIGH task availability.
 
-For each one, verify before including it:
-1. It has a real track record of paying out (not just claiming to).
-2. It does not require any upfront payment to join.
-3. It lists at least one payout method usable from Nigeria (Payoneer, cryptocurrency, direct bank transfer, or gift card).
+CRITICAL INSTRUCTION: DO NOT recommend extremely mainstream, oversaturated, or highly restrictive platforms.
+Specifically, completely IGNORE the following and anything similar to them:
+- Amazon Associates
+- Remotasks or Outlier
+- UserTesting
+- Swagbucks or InboxDollars
+- Appen, Clickworker, or Toloka
 
-Return ONLY a JSON array, no other text, no markdown fences, in this exact shape:
+For each platform you DO recommend, verify:
+1. It is a lesser-known but highly legitimate platform with a real track record of paying out.
+2. It actively supports and has decent task allocation for users in {COUNTRY}.
+3. The payout threshold is realistically achievable (e.g. $5 - $20).
+
+Format your response exactly as a JSON array of objects:
 [
   {
-    "name": string,
+    "name": "Platform Name",
     "category": "surveys" | "watch_to_earn" | "microtasks" | "website_testing" | "affiliate" | "other",
-    "payout_methods": string[],
-    "payout_threshold_usd": number | null,
-    "signup_url": string,
-    "red_flags": string[]
+    "payout_methods": ["PayPal", "Crypto"],
+    "payout_threshold_usd": 5,
+    "signup_url": "https://...",
+    "red_flags": ["Requires ID verification"]
   }
 ]
 
-Omit anything you are not reasonably confident is currently active and eligible for {COUNTRY}. An empty array is a valid, correct response if nothing new qualifies.
+Omit anything you are not reasonably confident is currently active, eligible for {COUNTRY}, and unsaturated. An empty array is a valid, correct response if nothing new qualifies.
 `;
 
 export default {
@@ -202,7 +210,7 @@ async function runDiscovery(env: Env) {
 
   const userPrompt = `
 Existing opportunities we already know about (DO NOT RECOMMEND THESE): ${ignoreNames || 'None'}
-Find 2-3 NEW platforms that are highly rated and working in ${country} right now.
+Find 2-3 NEW, unsaturated "hidden gem" platforms that are highly rated, have good task allocations, and are working in ${country} right now. Do not include major saturated platforms.
   `;
 
   // 3. Call Gemini
