@@ -27,15 +27,15 @@ For each platform you DO recommend, verify:
 2. It actively supports and has decent task allocation for users in {COUNTRY}.
 3. The payout threshold is realistically achievable (e.g. $5 - $20).
 
-Format your response exactly as a JSON array of objects:
+Format your response exactly as a JSON array of objects. YOU MUST use REAL data, NEVER use placeholder strings like "https://...":
 [
   {
-    "name": "Platform Name",
-    "category": "surveys" | "watch_to_earn" | "microtasks" | "website_testing" | "affiliate" | "other",
-    "payout_methods": ["PayPal", "Crypto"],
-    "payout_threshold_usd": 5,
-    "signup_url": "https://...",
-    "red_flags": ["Requires ID verification"]
+    "name": "<Real Platform Name>",
+    "category": "<Must be one of: surveys, watch_to_earn, microtasks, website_testing, affiliate, other>",
+    "payout_methods": ["<Real Payout Method 1>", "<Real Payout Method 2>"],
+    "payout_threshold_usd": <Real Number>,
+    "signup_url": "<Real, Valid HTTPS URL to the platform>",
+    "red_flags": ["<Real warning or downside 1>", "<Real warning or downside 2>"]
   }
 ]
 
