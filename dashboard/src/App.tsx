@@ -37,7 +37,7 @@ function App() {
   const fetchDashboardData = async () => {
     const { data: opps } = await supabase.from('opportunities').select('*').order('last_seen_at', { ascending: false });
     const { data: earns } = await supabase.from('earnings').select(`*, accounts(opportunity_id, status)`).order('earned_at', { ascending: false });
-    const { data: accs } = await supabase.from('accounts').select(`*, opportunities(*)`).eq('status', 'active');
+    const { data: accs } = await supabase.from('accounts').select(`*, opportunities(*)`).order('created_at', { ascending: false });
     
     if (opps) setOpportunities(opps);
     if (earns) setEarnings(earns);
@@ -146,6 +146,7 @@ function App() {
   const navItems = [
     { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
     { id: 'opportunities', icon: Search, label: 'Discoveries' },
+    { id: 'accounts', icon: CheckCircle2, label: 'Accounts' },
     { id: 'quicklog', icon: PlusCircle, label: 'Quick Log' },
   ];
 
@@ -249,8 +250,8 @@ function App() {
               >
                 <h3 className="text-2xl font-bold mb-6">Threshold Tracker</h3>
                 <div className="space-y-6">
-                  {accounts.length === 0 && <p className="text-gray-500">No active accounts to track.</p>}
-                  {accounts.map(acc => {
+                  {accounts.filter(a => a.status === 'active').length === 0 && <p className="text-gray-500">No active accounts to track.</p>}
+                  {accounts.filter(a => a.status === 'active').map(acc => {
                     const opp = acc.opportunities;
                     const threshold = opp.payout_threshold_usd || 0;
                     const accEarnings = earnings.filter(e => e.account_id === acc.id).reduce((a,c) => a + Number(c.amount), 0);
@@ -319,7 +320,20 @@ function App() {
                         <span className="text-gray-300">Threshold:</span> ${opp.payout_threshold_usd}
                       </p>
                     </div>
-                    <button className="btn-primary flex items-center gap-2" onClick={() => window.open(opp.signup_url, '_blank')}>
+                    <button className="btn-primary flex items-center gap-2" onClick={async () => {
+                      window.open(opp.signup_url, '_blank');
+                      // Kick off AI setup assistant in background
+                      try {
+                        await fetch('https://discovery-agent.daniellancce1.workers.dev/setup-assistant', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ opportunityId: opp.id })
+                        });
+                        fetchDashboardData();
+                      } catch (e) {
+                        console.error(e);
+                      }
+                    }}>
                       Review & Setup <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />
                     </button>
                   </motion.div>
@@ -328,6 +342,69 @@ function App() {
                   <div className="py-12 text-center text-gray-500 border border-dashed border-gray-800 rounded-3xl">
                     <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
                     <p>No opportunities found yet. The discovery cron will populate this soon.</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* ACCOUNTS TAB */}
+          {activeTab === 'accounts' && (
+            <motion.div 
+              key="accounts"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.4 }}
+              className="space-y-8 max-w-5xl mx-auto"
+            >
+              <header>
+                <h2 className="text-4xl font-bold tracking-tight mb-2">My Accounts</h2>
+                <p className="text-gray-400 text-lg">Manage your signed-up platforms and AI setup notes.</p>
+              </header>
+              
+              <div className="grid gap-5">
+                {accounts.map((acc, i) => (
+                  <motion.div 
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    key={acc.id} 
+                    className="glass-panel p-6 sm:p-8 flex flex-col group transition-all duration-300"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                          {acc.opportunities?.name}
+                          <span className={`text-[10px] px-3 py-1 border rounded-full uppercase tracking-widest font-semibold ${acc.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'}`}>
+                            {acc.status.replace('_', ' ')}
+                          </span>
+                        </h3>
+                      </div>
+                      {acc.status === 'pending_setup' && (
+                        <button 
+                          className="btn-primary py-2 px-4 text-sm"
+                          onClick={async () => {
+                            await supabase.from('accounts').update({ status: 'active' }).eq('id', acc.id);
+                            fetchDashboardData();
+                          }}
+                        >
+                          Mark as Active
+                        </button>
+                      )}
+                    </div>
+                    {acc.notes && (
+                      <div className="mt-4 p-4 bg-gray-900/50 rounded-xl border border-gray-800 text-gray-300 whitespace-pre-wrap font-mono text-sm leading-relaxed">
+                        <strong className="block mb-2 text-indigo-400">AI Setup Insights:</strong>
+                        {acc.notes}
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+                {accounts.length === 0 && (
+                  <div className="py-12 text-center text-gray-500 border border-dashed border-gray-800 rounded-3xl">
+                    <CheckCircle2 className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                    <p>No accounts yet. Go to Discoveries and click 'Review & Setup' to get started.</p>
                   </div>
                 )}
               </div>
@@ -383,8 +460,8 @@ function App() {
                         onChange={(e) => setLogAccountId(e.target.value)} 
                         required
                       >
-                        {accounts.length === 0 && <option value="">No active accounts found</option>}
-                        {accounts.map(acc => (
+                        {accounts.filter(a => a.status === 'active').length === 0 && <option value="">No active accounts found</option>}
+                        {accounts.filter(a => a.status === 'active').map(acc => (
                           <option key={acc.id} value={acc.id}>{acc.opportunities?.name} (Active)</option>
                         ))}
                       </select>
@@ -412,7 +489,7 @@ function App() {
                   <button 
                     type="submit" 
                     className="btn-primary w-full py-4 text-lg mt-8" 
-                    disabled={isLogging || accounts.length === 0}
+                    disabled={isLogging || accounts.filter(a => a.status === 'active').length === 0}
                   >
                     {isLogging ? (
                       <span className="flex items-center justify-center gap-3">

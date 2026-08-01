@@ -47,8 +47,17 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/trigger-discovery') {
-      ctx.waitUntil(runDiscovery(env));
-      return new Response("Discovery triggered", { status: 200 });
+      try {
+        const result = await runDiscovery(env);
+        return new Response(JSON.stringify({ success: true, result }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error: any) {
+        return new Response(JSON.stringify({ success: false, error: error.message, stack: error.stack }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
     
     if (url.pathname === '/setup-assistant' && request.method === 'POST') {
@@ -71,7 +80,9 @@ const GEMINI_MODELS = [
   'gemini-3.1-flash-lite',
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
-  'gemini-3.6-flash'
+  'gemini-3.6-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash'
 ];
 
 async function fetchFromGeminiWithFallback(env: Env, requestBody: any): Promise<any> {
@@ -189,11 +200,6 @@ async function runDiscovery(env: Env) {
     contents: [{
       role: "user",
       parts: [{ text: userPrompt }]
-    }],
-    tools: [{
-      googleSearchRetrieval: {
-        dynamicRetrievalConfig: { mode: "MODE_DYNAMIC", dynamicThreshold: 0.3 }
-      }
     }]
   });
   const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
