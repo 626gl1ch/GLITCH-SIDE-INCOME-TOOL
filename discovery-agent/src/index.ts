@@ -113,10 +113,16 @@ async function fetchFromGeminiWithFallback(env: Env, requestBody: any): Promise<
   
   for (const model of GEMINI_MODELS) {
     try {
+      // Add Google Search Grounding to all requests
+      const bodyWithTools = {
+        ...requestBody,
+        tools: [{ googleSearch: {} }]
+      };
+      
       const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(bodyWithTools)
       });
       
       if (geminiRes.ok) {
@@ -167,9 +173,15 @@ payout_methods: ${opp.payout_methods.join(', ')}
 signup_url: ${opp.signup_url}
 
 Produce:
-1. A 3-bullet summary of likely eligibility/KYC requirements for a Nigeria-based signup.
+1. A 3-bullet summary of REAL, verified eligibility/KYC requirements for a user based in their country.
 2. Draft profile text (display name, short bio) based on this stored profile: ${JSON.stringify(profile)} — for the human to copy in, not to submit.
 3. Any known submission quirks (e.g. "requires phone verification", "flags VPN usage", "asks for a referral code").
+
+CRITICAL ANTI-HALLUCINATION RULES:
+- Do NOT guess, estimate, or hallucinate the minimum withdrawal threshold. If you don't know the exact current threshold, say "Threshold unknown".
+- Do NOT make up fake KYC or VPN rules that sound plausible. Only list rules if you have verified them.
+- Do NOT use dummy data or placeholder strings.
+- Base your insights strictly on real-world facts.
 
 Do not attempt to access or submit the signup form. Output only the summary and draft text for human review.`;
 
