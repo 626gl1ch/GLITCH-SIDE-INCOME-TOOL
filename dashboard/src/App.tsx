@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import { LayoutDashboard, Wallet, LogOut, Search, PlusCircle, Activity, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { LayoutDashboard, Wallet, LogOut, Search, PlusCircle, Activity, ChevronRight, CheckCircle2, Settings as SettingsIcon, Star, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Background Component for Premium Feel ---
@@ -20,7 +20,9 @@ function App() {
   const [opportunities, setOpportunities] = useState<any[]>([]);
   const [earnings, setEarnings] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
+  const [profileCountry, setProfileCountry] = useState('Nigeria');
   const [activeTab, setActiveTab] = useState('overview');
+  const [isSearching, setIsSearching] = useState(false);
   
   // Form state
   const [logAccountId, setLogAccountId] = useState('');
@@ -38,12 +40,16 @@ function App() {
     const { data: opps } = await supabase.from('opportunities').select('*').order('last_seen_at', { ascending: false });
     const { data: earns } = await supabase.from('earnings').select(`*, accounts(opportunity_id, status)`).order('earned_at', { ascending: false });
     const { data: accs } = await supabase.from('accounts').select(`*, opportunities(*)`).order('created_at', { ascending: false });
+    const { data: prof } = await supabase.from('profile').select('*').limit(1);
     
     if (opps) setOpportunities(opps);
     if (earns) setEarnings(earns);
     if (accs) {
       setAccounts(accs);
       if (accs.length > 0 && !logAccountId) setLogAccountId(accs[0].id);
+    }
+    if (prof && prof.length > 0 && prof[0].country) {
+      setProfileCountry(prof[0].country);
     }
   };
 
@@ -146,9 +152,12 @@ function App() {
   const navItems = [
     { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
     { id: 'opportunities', icon: Search, label: 'Discoveries' },
-    { id: 'accounts', icon: CheckCircle2, label: 'Accounts' },
+    { id: 'accounts', icon: CheckCircle2, label: 'My Tasks' },
     { id: 'quicklog', icon: PlusCircle, label: 'Quick Log' },
+    { id: 'settings', icon: SettingsIcon, label: 'Settings' }
   ];
+
+  const displayOpportunities = opportunities.filter(opp => !accounts.some(acc => acc.opportunity_id === opp.id));
 
   return (
     <div className="relative min-h-screen flex flex-col md:flex-row font-outfit text-gray-100 bg-gray-950">
@@ -293,13 +302,35 @@ function App() {
               transition={{ duration: 0.4 }}
               className="space-y-8 max-w-5xl mx-auto"
             >
-              <header>
-                <h2 className="text-4xl font-bold tracking-tight mb-2">New Discoveries</h2>
-                <p className="text-gray-400 text-lg">Opportunities automatically found by the AI agent.</p>
+              <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-4xl font-bold tracking-tight mb-2">New Discoveries</h2>
+                  <p className="text-gray-400 text-lg">Opportunities automatically found by the AI agent.</p>
+                </div>
+                <button 
+                  onClick={async () => {
+                    setIsSearching(true);
+                    try {
+                      await fetch('https://discovery-agent.daniellancce1.workers.dev/trigger-discovery');
+                      await fetchDashboardData();
+                    } catch (e) {
+                      console.error(e);
+                    }
+                    setIsSearching(false);
+                  }}
+                  disabled={isSearching}
+                  className="btn-primary py-3 px-6 whitespace-nowrap flex items-center gap-2"
+                >
+                  {isSearching ? (
+                    <><motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, ease: "linear", duration: 1 }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> Searching...</>
+                  ) : (
+                    <><Search className="w-4 h-4" /> Find More Tasks</>
+                  )}
+                </button>
               </header>
               
               <div className="grid gap-5">
-                {opportunities.map((opp, i) => (
+                {displayOpportunities.map((opp, i) => (
                   <motion.div 
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -338,10 +369,10 @@ function App() {
                     </button>
                   </motion.div>
                 ))}
-                {opportunities.length === 0 && (
+                {displayOpportunities.length === 0 && (
                   <div className="py-12 text-center text-gray-500 border border-dashed border-gray-800 rounded-3xl">
                     <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                    <p>No opportunities found yet. The discovery cron will populate this soon.</p>
+                    <p>No new opportunities found yet. Click "Find More Tasks" to ask the AI to search.</p>
                   </div>
                 )}
               </div>
@@ -381,17 +412,43 @@ function App() {
                           </span>
                         </h3>
                       </div>
-                      {acc.status === 'pending_setup' && (
+                      <div className="flex items-center gap-2">
                         <button 
-                          className="btn-primary py-2 px-4 text-sm"
                           onClick={async () => {
-                            await supabase.from('accounts').update({ status: 'active' }).eq('id', acc.id);
+                            await supabase.from('accounts').update({ up_next: !acc.up_next }).eq('id', acc.id);
                             fetchDashboardData();
                           }}
+                          className={`p-2 rounded-xl transition-colors ${acc.up_next ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-800/50 text-gray-500 hover:text-white'}`}
+                          title="Mark as Up Next"
                         >
-                          Mark as Active
+                          <Star className="w-5 h-5" fill={acc.up_next ? "currentColor" : "none"} />
                         </button>
-                      )}
+                        
+                        {acc.status === 'pending_setup' && (
+                          <button 
+                            className="btn-primary py-2 px-4 text-sm"
+                            onClick={async () => {
+                              await supabase.from('accounts').update({ status: 'active' }).eq('id', acc.id);
+                              fetchDashboardData();
+                            }}
+                          >
+                            Mark Complete
+                          </button>
+                        )}
+                        
+                        <button 
+                          onClick={async () => {
+                            if (confirm('Are you sure you want to remove this task?')) {
+                              await supabase.from('accounts').delete().eq('id', acc.id);
+                              fetchDashboardData();
+                            }
+                          }}
+                          className="p-2 rounded-xl bg-gray-800/50 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Remove Task"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
                     {acc.notes && (
                       <div className="mt-4 p-4 bg-gray-900/50 rounded-xl border border-gray-800 text-gray-300 whitespace-pre-wrap font-mono text-sm leading-relaxed">
@@ -497,6 +554,56 @@ function App() {
                         Logging...
                       </span>
                     ) : 'Log Earnings'}
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          )}
+
+          {/* SETTINGS TAB */}
+          {activeTab === 'settings' && (
+            <motion.div 
+              key="settings"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.4 }}
+              className="max-w-2xl mx-auto"
+            >
+              <header className="mb-10">
+                <h2 className="text-4xl font-bold tracking-tight mb-2">Settings</h2>
+                <p className="text-gray-400 text-lg">Configure your tracking and AI preferences.</p>
+              </header>
+
+              <div className="glass-panel p-8">
+                <h3 className="text-2xl font-bold text-white mb-6">AI Localization</h3>
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    // Assuming profile ID 1 is the user's profile
+                    await supabase.from('profile').update({ country: profileCountry }).eq('id', 1);
+                    alert('Settings Saved!');
+                    fetchDashboardData();
+                  }}
+                  className="space-y-6"
+                >
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-400 mb-2 tracking-wide uppercase">Your Country</label>
+                    <input 
+                      type="text" 
+                      required 
+                      className="input-field" 
+                      placeholder="e.g. Nigeria, USA, India" 
+                      value={profileCountry} 
+                      onChange={(e) => setProfileCountry(e.target.value)} 
+                    />
+                    <p className="text-sm text-gray-500 mt-2">
+                      The AI agent uses this to find side income opportunities that specifically accept users from your region.
+                    </p>
+                  </div>
+                  
+                  <button type="submit" className="btn-primary w-full py-4 text-lg mt-4">
+                    Save Settings
                   </button>
                 </form>
               </div>

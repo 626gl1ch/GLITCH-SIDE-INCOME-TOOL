@@ -8,9 +8,9 @@ export interface Env {
 
 const DISCOVERY_SYSTEM_PROMPT = `
 You are a research assistant finding legitimate online income opportunities
-for a Nigeria-based user. Search the web for survey sites, GPT (get-paid-to)
+for a user based in {COUNTRY}. Search the web for survey sites, GPT (get-paid-to)
 platforms, affiliate programs, and microtask/testing platforms that currently
-accept Nigerian users.
+accept users from {COUNTRY}.
 
 For each one, verify before including it:
 1. It has a real track record of paying out (not just claiming to).
@@ -29,7 +29,7 @@ Return ONLY a JSON array, no other text, no markdown fences, in this exact shape
   }
 ]
 
-Omit anything you are not reasonably confident is currently active and Nigeria-eligible. An empty array is a valid, correct response if nothing new qualifies.
+Omit anything you are not reasonably confident is currently active and eligible for {COUNTRY}. An empty array is a valid, correct response if nothing new qualifies.
 `;
 
 export default {
@@ -183,26 +183,31 @@ Do not attempt to access or submit the signup form. Output only the summary and 
 }
 
 async function runDiscovery(env: Env) {
-  // 1. Get Profile
+  // 1. Fetch user profile to get country and preferences
   const profileRes = await fetch(`${env.SUPABASE_URL}/rest/v1/profile?select=*&limit=1`, {
-    headers: {
-      apikey: env.SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`
-    }
+    headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}` }
   });
   const profiles = await profileRes.json() as any[];
-  if (!profiles || profiles.length === 0) {
-    throw new Error("No profile found");
-  }
-  const profile = profiles[0];
-
-  // 2. Call Gemini API
-  const userPrompt = `Find new or currently active opportunities in these categories: ${profile.categories.join(', ')}. Prioritize platforms with payout methods in ${profile.preferred_payout_methods.join(', ')} and a payout threshold at or below $${profile.min_acceptable_payout_usd * 5}.`;
+  const profile = profiles[0] || {};
   
+  const country = profile.country || 'Nigeria';
+  const systemPrompt = DISCOVERY_SYSTEM_PROMPT.replace(/\{COUNTRY\}/g, country);
+
+  // 2. Fetch existing opportunities so AI doesn't duplicate
+  const existingRes = await fetch(`${env.SUPABASE_URL}/rest/v1/opportunities?select=name,category`, {
+    headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}` }
+  });
+  const existing = await existingRes.json() as any[];
+  const ignoreNames = existing.map(e => e.name).join(', ');
+
+  const userPrompt = `
+Existing opportunities we already know about (DO NOT RECOMMEND THESE): ${ignoreNames || 'None'}
+Find 2-3 NEW platforms that are highly rated and working in ${country} right now.
+  `;
+
+  // 3. Call Gemini
   const geminiData = await fetchFromGeminiWithFallback(env, {
-    systemInstruction: {
-      parts: [{ text: DISCOVERY_SYSTEM_PROMPT }]
-    },
+    systemInstruction: { parts: [{ text: systemPrompt }] },
     contents: [{
       role: "user",
       parts: [{ text: userPrompt }]
@@ -259,25 +264,20 @@ async function runDiscovery(env: Env) {
   }
 
   // 4. Send Telegram Digest
-  if (newItems.length > 0 && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
-    let msg = `🔍 *New Opportunities Discovered!*\n\n`;
-    for (const item of newItems) {
-      msg += `*${item.name}* (${item.category})\n`;
-      msg += `Payout: ${item.payout_methods.join(', ')} (Threshold: $${item.payout_threshold_usd})\n`;
-      if (item.red_flags && item.red_flags.length > 0) {
-        msg += `🚩 Flags: ${item.red_flags.join(', ')}\n`;
-      }
-      msg += `[Signup Link](${item.signup_url})\n\n`;
-    }
+  // 4. Send Telegram summary if enabled
+  if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID && newItems.length > 0) {
+    const lines = newItems.map(i => `- ${i.name} (${i.category})`);
+    const msg = `Found ${newItems.length} new side-income opportunities:\n${lines.join('\n')}`;
     
     await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: env.TELEGRAM_CHAT_ID,
-        text: msg,
-        parse_mode: "Markdown"
+        text: msg
       })
-    });
+    }).catch(console.error);
   }
+  
+  return newItems;
 }
