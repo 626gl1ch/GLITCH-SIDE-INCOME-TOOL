@@ -157,6 +157,13 @@ function App() {
     { id: 'settings', icon: SettingsIcon, label: 'Settings' }
   ];
 
+  const commonCountries = [
+    "United States", "United Kingdom", "Canada", "Australia",
+    "Nigeria", "India", "Philippines", "South Africa",
+    "Kenya", "Pakistan", "Bangladesh", "Germany",
+    "France", "Spain", "Brazil", "Mexico"
+  ];
+
   const displayOpportunities = opportunities.filter(opp => !accounts.some(acc => acc.opportunity_id === opp.id));
 
   return (
@@ -589,14 +596,20 @@ function App() {
                 >
                   <div>
                     <label className="block text-sm font-semibold text-gray-400 mb-2 tracking-wide uppercase">Your Country</label>
-                    <input 
-                      type="text" 
-                      required 
-                      className="input-field" 
-                      placeholder="e.g. Nigeria, USA, India" 
-                      value={profileCountry} 
-                      onChange={(e) => setProfileCountry(e.target.value)} 
-                    />
+                    <div className="relative">
+                      <select 
+                        className="input-field appearance-none cursor-pointer" 
+                        value={profileCountry} 
+                        onChange={(e) => setProfileCountry(e.target.value)} 
+                        required
+                      >
+                        <option value="" disabled>Select your country</option>
+                        {commonCountries.sort().map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                      <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none rotate-90" />
+                    </div>
                     <p className="text-sm text-gray-500 mt-2">
                       The AI agent uses this to find side income opportunities that specifically accept users from your region.
                     </p>
