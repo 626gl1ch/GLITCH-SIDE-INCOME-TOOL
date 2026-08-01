@@ -13,12 +13,14 @@ platforms, affiliate programs, and microtask/testing platforms that CURRENTLY
 accept users from {COUNTRY} and have HIGH task availability.
 
 CRITICAL INSTRUCTION: DO NOT recommend extremely mainstream, oversaturated, or highly restrictive platforms.
-Specifically, completely IGNORE the following and anything similar to them:
-- Amazon Associates
-- Remotasks or Outlier
-- UserTesting
-- Swagbucks or InboxDollars
-- Appen, Clickworker, or Toloka
+Specifically, completely IGNORE the following and anything similar to them (they waste time or are too saturated):
+- Amazon Associates, Fiverr, Upwork, Freelancer
+- Remotasks, Outlier, Scale AI, DataAnnotation.tech
+- UserTesting, Tester Work, Trymata (TryMyUI), Userlytics
+- Swagbucks, InboxDollars, ySense, Freecash, PrizeRebel, MyPoints
+- Appen, Clickworker, Toloka, Telus International, OneForma, Microworkers
+- Rev, TranscribeMe, GoTranscript
+- Prolific (waitlists are too long)
 
 For each platform you DO recommend, verify:
 1. It is a lesser-known but highly legitimate platform with a real track record of paying out.
