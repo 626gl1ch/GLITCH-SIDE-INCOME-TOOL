@@ -45,28 +45,41 @@ export default {
   // Also expose as an endpoint so we can manually trigger it during testing,
   // and handle Setup Assistant tasks.
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    };
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
+
     const url = new URL(request.url);
     if (url.pathname === '/trigger-discovery') {
       try {
         const result = await runDiscovery(env);
         return new Response(JSON.stringify({ success: true, result }), {
-          headers: { 'Content-Type': 'application/json' }
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (error: any) {
         return new Response(JSON.stringify({ success: false, error: error.message, stack: error.stack }), {
           status: 500,
-          headers: { 'Content-Type': 'application/json' }
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
     }
     
     if (url.pathname === '/setup-assistant' && request.method === 'POST') {
       try {
-        const body = await request.json() as any;
-        const result = await runSetupAssistant(env, body.opportunityId);
-        return new Response(JSON.stringify({ result }), { status: 200, headers: {'Content-Type': 'application/json'} });
+        const { opportunityId } = await request.json() as any;
+        if (!opportunityId) {
+          return new Response("Missing opportunityId", { status: 400, headers: corsHeaders });
+        }
+        const result = await runSetupAssistant(env, opportunityId);
+        return new Response(JSON.stringify({ result }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: {'Content-Type': 'application/json'} });
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
     
@@ -155,25 +168,18 @@ Do not attempt to access or submit the signup form. Output only the summary and 
   });
 
 
-  const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "No insights found.";
+  const setupNotes = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "No insights found.";
   
   // 4. Attach draft to a new account row
-  const accountBody = {
-    opportunity_id: opp.id,
-    status: 'pending_setup',
-    notes: text
-  };
-  await fetch(`${env.SUPABASE_URL}/rest/v1/accounts`, {
+  const { error: insertError } = await fetch(`${env.SUPABASE_URL}/rest/v1/accounts`, {
     method: 'POST',
-    headers: {
-      apikey: env.SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(accountBody)
-  });
+    headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ opportunity_id: opportunityId, notes: setupNotes, status: 'pending_setup' })
+  }).then(r => r.json()) as any;
 
-  return text;
+  if (insertError) throw new Error(insertError.message);
+
+  return setupNotes;
 }
 
 async function runDiscovery(env: Env) {
