@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import { LayoutDashboard, Wallet, LogOut, Search, PlusCircle, Activity, ChevronRight, CheckCircle2, Settings as SettingsIcon, Star, Trash2, Flag, Clock, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, Wallet, LogOut, Search, PlusCircle, Activity, ChevronRight, CheckCircle2, XCircle, Settings as SettingsIcon, Star, Trash2, Flag, Clock, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Background Component for Premium Feel ---
@@ -30,6 +30,7 @@ function App() {
   const [logAmount, setLogAmount] = useState('');
   const [isLogging, setIsLogging] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -106,7 +107,8 @@ function App() {
     
     setIsLogging(false);
     if (error) {
-      alert("Error logging earnings: " + error.message);
+      setLogError(error.message);
+      setTimeout(() => setLogError(null), 3500);
     } else {
       setLogAmount('');
       setShowSuccess(true);
@@ -263,11 +265,18 @@ function App() {
                 </button>
               </header>
               <div className="grid gap-5">
-                {displayOpportunities.map((opp, i) => {
-                  const daysVerifiedAgo = opp.last_verified_at 
-                    ? Math.floor((new Date().getTime() - new Date(opp.last_verified_at).getTime()) / (1000 * 3600 * 24))
-                    : null;
-                  return (
+                {displayOpportunities.length === 0 ? (
+                  <div className="glass-panel p-10 text-center flex flex-col items-center justify-center text-gray-400">
+                    <Search className="w-12 h-12 mb-4 text-indigo-400/50" />
+                    <h3 className="text-xl font-semibold text-white mb-2">No New Opportunities</h3>
+                    <p>Click "Find More" to let the AI search the web for new hidden gems in {profileCountry}.</p>
+                  </div>
+                ) : (
+                  displayOpportunities.map((opp, i) => {
+                    const daysVerifiedAgo = opp.last_verified_at 
+                      ? Math.floor((new Date().getTime() - new Date(opp.last_verified_at).getTime()) / (1000 * 3600 * 24))
+                      : null;
+                    return (
                     <motion.div key={opp.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="glass-panel p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start gap-6">
                       <div className="flex-1">
                         <h3 className="text-2xl font-bold mb-2">{opp.name}</h3>
@@ -293,39 +302,57 @@ function App() {
                       </div>
                     </motion.div>
                   );
-                })}
+                }))}
               </div>
             </motion.div>
           )}
 
           {activeTab === 'accounts' && (
+            <motion.div key="accounts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.4 }} className="space-y-6 max-w-4xl mx-auto">
+              <header className="mb-8">
+                <h2 className="text-4xl font-bold tracking-tight mb-2">My Accounts</h2>
+                <p className="text-gray-400 text-lg">Manage your active platform accounts and view AI setup notes.</p>
+              </header>
+
+              <div className="grid gap-5">
+                {accounts.length === 0 ? (
+                  <div className="glass-panel p-10 text-center flex flex-col items-center justify-center text-gray-400">
+                    <Wallet className="w-12 h-12 mb-4 text-indigo-400/50" />
+                    <h3 className="text-xl font-semibold text-white mb-2">No Active Accounts</h3>
+                    <p>Go to the Discoveries tab and click "Review & Setup" on a platform to start tracking it.</p>
+                  </div>
+                ) : (
+                  accounts.map(acc => (
+                    <motion.div key={acc.id} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel p-6 sm:p-8">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-2xl font-bold text-white mb-1">{acc.opportunities?.name}</h3>
+                          <div className="flex gap-3 text-sm">
+                            <span className="px-2 py-1 rounded bg-green-500/10 text-green-400 border border-green-500/20 capitalize">{acc.status}</span>
+                            <span className="px-2 py-1 rounded bg-gray-800 text-gray-400">Since {new Date(acc.created_at).toLocaleDateString()}</span>
+                          </div>
+                        </div>
                         <button 
                           onClick={async () => {
-                            if (confirm('Are you sure you want to remove this task?')) {
+                            if (confirm('Are you sure you want to remove this account?')) {
                               await supabase.from('accounts').delete().eq('id', acc.id);
                               fetchDashboardData();
                             }
                           }}
                           className="p-2 rounded-xl bg-gray-800/50 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="Remove Task"
+                          title="Remove Account"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
                       </div>
-                    </div>
-                    {acc.notes && (
-                      <div className="mt-4 p-4 bg-gray-900/50 rounded-xl border border-gray-800 text-gray-300 whitespace-pre-wrap font-mono text-sm leading-relaxed">
-                        <strong className="block mb-2 text-indigo-400">AI Setup Insights:</strong>
-                        {acc.notes}
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-                {accounts.length === 0 && (
-                  <div className="py-12 text-center text-gray-500 border border-dashed border-gray-800 rounded-3xl">
-                    <CheckCircle2 className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                    <p>No accounts yet. Go to Discoveries and click 'Review & Setup' to get started.</p>
-                  </div>
+                      {acc.notes && (
+                        <div className="mt-4 p-4 bg-gray-900/50 rounded-xl border border-gray-800 text-gray-300 whitespace-pre-wrap font-mono text-sm leading-relaxed">
+                          <strong className="block mb-2 text-indigo-400">AI Setup Insights:</strong>
+                          {acc.notes}
+                        </div>
+                      )}
+                    </motion.div>
+                  ))
                 )}
               </div>
             </motion.div>
@@ -366,6 +393,24 @@ function App() {
                         <CheckCircle2 className="w-16 h-16 text-green-400 mb-4" />
                       </motion.div>
                       <h3 className="text-2xl font-bold text-green-400">Earnings Logged!</h3>
+                    </motion.div>
+                  )}
+                  {logError && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 bg-red-500/10 backdrop-blur-md z-20 flex flex-col items-center justify-center border border-red-500/20"
+                    >
+                      <motion.div 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: "spring" }}
+                      >
+                        <XCircle className="w-16 h-16 text-red-400 mb-4" />
+                      </motion.div>
+                      <h3 className="text-2xl font-bold text-red-400">Failed to Log</h3>
+                      <p className="text-red-300 mt-2 text-sm">{logError}</p>
                     </motion.div>
                   )}
                 </AnimatePresence>
