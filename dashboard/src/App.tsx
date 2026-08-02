@@ -72,7 +72,8 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ opportunityId })
       });
-      fetchDashboardData();
+      await fetchDashboardData();
+      setActiveTab('accounts');
     } catch (e) {
       console.error(e);
     } finally {
@@ -283,8 +284,8 @@ function App() {
                         </p>
                       </div>
                       <div className="flex flex-col gap-2">
-                        <button onClick={() => handleReviewAndSetup(opp.id)} className="btn-primary py-2 px-4 text-sm flex items-center gap-2">
-                          Review & Setup <ChevronRight className="w-4 h-4" />
+                        <button onClick={() => handleReviewAndSetup(opp.id)} disabled={setupLoading === opp.id} className="btn-primary py-2 px-4 text-sm flex items-center justify-center gap-2 min-w-[140px]">
+                          {setupLoading === opp.id ? 'Setting up...' : <>Review & Setup <ChevronRight className="w-4 h-4" /></>}
                         </button>
                         <button onClick={() => handleFlagOpportunity(opp.id)} className="text-xs text-gray-500 hover:text-red-400 flex items-center justify-center gap-1">
                           <Flag className="w-3 h-3" /> Flag as Incorrect
